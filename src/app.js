@@ -39,6 +39,20 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 const uploadsRoot = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsRoot));
 
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Ecommerce API is running',
+    version: 'v1',
+    health: '/api/v1/health',
+    endpoints: {
+      products: '/api/v1/products',
+      categories: '/api/v1/categories',
+      login: 'POST /api/v1/auth/login',
+    },
+  });
+});
+
 app.use('/api/v1', routes);
 
 app.use(notFoundHandler);
