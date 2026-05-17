@@ -136,8 +136,8 @@ async function insertProduct(data) {
     )
     ${driver === 'postgres' ? 'RETURNING id' : ''}
   `;
-  const [result] = await query(sql, data);
-  return driver === 'postgres' ? result[0].id : result.insertId;
+  const [, meta] = await query(sql, data);
+  return meta.insertId;
 }
 
 async function updateProduct(id, data) {
@@ -159,14 +159,14 @@ async function updateProduct(id, data) {
       featured = :featured
     WHERE id = :id AND deleted_at IS NULL
   `;
-  const [result] = await query(sql, { ...data, id });
-  return result.affectedRows;
+  const [, meta] = await query(sql, { ...data, id });
+  return meta.affectedRows;
 }
 
 async function softDelete(id) {
   const sql = `UPDATE products SET deleted_at = NOW() WHERE id = :id AND deleted_at IS NULL`;
-  const [result] = await query(sql, { id });
-  return result.affectedRows;
+  const [, meta] = await query(sql, { id });
+  return meta.affectedRows;
 }
 
 module.exports = {

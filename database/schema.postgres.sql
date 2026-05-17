@@ -90,6 +90,28 @@ INSERT INTO websites (name, slug)
 VALUES ('Main Store', 'main-store')
 ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name;
 
+CREATE TABLE IF NOT EXISTS product_variants (
+  id SERIAL PRIMARY KEY,
+  product_id INT NOT NULL REFERENCES products (id) ON DELETE CASCADE,
+  name VARCHAR(191) NOT NULL,
+  sku VARCHAR(120),
+  price DECIMAL(12, 2),
+  sale_price DECIMAL(12, 2),
+  stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
+  attributes JSONB,
+  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  deleted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_variants_product ON product_variants (product_id);
+CREATE INDEX IF NOT EXISTS idx_product_variants_deleted ON product_variants (deleted_at);
+
+DROP TRIGGER IF EXISTS trg_product_variants_updated ON product_variants;
+CREATE TRIGGER trg_product_variants_updated BEFORE UPDATE ON product_variants
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 INSERT INTO admins (username, email, password)
 VALUES (
   'admin',

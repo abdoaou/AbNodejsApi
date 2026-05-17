@@ -48,6 +48,9 @@ app.get('/', (_req, res) => {
     endpoints: {
       products: '/api/v1/products',
       categories: '/api/v1/categories',
+      websites: '/api/v1/websites',
+      admins: '/api/v1/admins',
+      productVariants: '/api/v1/product-variants',
       login: 'POST /api/v1/auth/login',
     },
   });

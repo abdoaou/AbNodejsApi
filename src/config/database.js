@@ -60,7 +60,11 @@ async function query(sql, params = {}) {
     return [result.rows, meta];
   }
 
-  return mysqlPool.execute(sql, params);
+  const [raw] = await mysqlPool.execute(sql, params);
+  if (raw && typeof raw === 'object' && 'affectedRows' in raw && !Array.isArray(raw)) {
+    return [[], { affectedRows: raw.affectedRows ?? 0, insertId: raw.insertId }];
+  }
+  return [raw, { affectedRows: 0, insertId: undefined }];
 }
 
 async function ping() {

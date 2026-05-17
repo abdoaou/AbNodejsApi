@@ -5,6 +5,9 @@ const router = express.Router();
 router.use('/auth', require('./auth.routes'));
 router.use('/products', require('./product.routes'));
 router.use('/categories', require('./category.routes'));
+router.use('/websites', require('./website.routes'));
+router.use('/admins', require('./admin.routes'));
+router.use('/product-variants', require('./productVariant.routes'));
 
 const asyncHandler = require('../utils/asyncHandler');
 const { ping, driver } = require('../config/database');
