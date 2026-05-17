@@ -1,0 +1,66 @@
+/**
+ * Centralized environment access.
+ */
+function buildSupabaseDatabaseUrl() {
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL;
+  }
+  const password = process.env.SUPABASE_DB_PASSWORD;
+  const ref = process.env.SUPABASE_PROJECT_REF;
+  if (!password || !ref) {
+    return null;
+  }
+
+  const database = process.env.SUPABASE_DB_NAME || 'postgres';
+  const usePooler = process.env.SUPABASE_USE_POOLER === 'true';
+  const poolerHost = process.env.SUPABASE_POOLER_HOST;
+
+  if (usePooler && poolerHost) {
+    const port = process.env.SUPABASE_DB_PORT || '5432';
+    const user = `postgres.${ref}`;
+    return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${poolerHost}:${port}/${database}`;
+  }
+
+  const host = process.env.SUPABASE_DB_HOST || `db.${ref}.supabase.co`;
+  const port = process.env.SUPABASE_DB_PORT || '5432';
+  const user = process.env.SUPABASE_DB_USER || 'postgres';
+  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
+}
+
+const databaseUrl = buildSupabaseDatabaseUrl();
+
+module.exports = {
+  nodeEnv: process.env.NODE_ENV || 'development',
+  port: Number(process.env.PORT) || 3000,
+  databaseUrl,
+  jwt: {
+    secret: process.env.JWT_SECRET || 'change-me-in-production',
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  },
+  supabase: {
+    url: process.env.SUPABASE_URL || '',
+    /** Publishable (anon) or service_role key — use service_role on server for admin bypassing RLS */
+    key:
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_PUBLISHABLE_KEY ||
+      '',
+    projectRef: process.env.SUPABASE_PROJECT_REF || 'vdasoslimprrlkjyuvjh',
+  },
+  db: {
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'ecommerce',
+    port: Number(process.env.DB_PORT) || 3306,
+    waitForConnections: true,
+    connectionLimit: Number(process.env.DB_CONNECTION_LIMIT) || 10,
+    queueLimit: 0,
+    ssl: process.env.DB_SSL === 'true' || Boolean(databaseUrl),
+  },
+  upload: {
+    maxFileSizeBytes: 5 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    allowedExtensions: ['.jpg', '.jpeg', '.png', '.webp'],
+  },
+};
