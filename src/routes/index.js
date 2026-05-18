@@ -5,6 +5,7 @@ const router = express.Router();
 router.use('/auth', require('./auth.routes'));
 router.use('/products', require('./product.routes'));
 router.use('/categories', require('./category.routes'));
+router.use('/parent-categories', require('./parentCategory.routes'));
 router.use('/websites', require('./website.routes'));
 router.use('/admins', require('./admin.routes'));
 router.use('/product-variants', require('./productVariant.routes'));

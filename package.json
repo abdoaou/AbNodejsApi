@@ -9,6 +9,7 @@
     "dev": "node --watch server.js",
     "verify:env": "node scripts/verify-env.js",
     "verify:db": "node scripts/test-db.js",
+    "test:parent-categories": "node scripts/test-parent-categories.js",
     "diagnose": "node scripts/diagnose.js"
   },
   "engines": {
