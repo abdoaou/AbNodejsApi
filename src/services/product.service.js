@@ -2,6 +2,7 @@ const productModel = require('../models/product.model');
 const websiteModel = require('../models/website.model');
 const categoryModel = require('../models/category.model');
 const { slugify, randomSuffix } = require('../utils/slug');
+const { resolveImageField } = require('../utils/resolveImage');
 
 function productFileUrl(file) {
   if (!file) return null;
@@ -105,23 +106,22 @@ function asBoolInt(value, defaultValue = 0) {
   return truthy ? 1 : 0;
 }
 
-function normalizePayload(body, file) {
-  const imageUrl = productFileUrl(file);
+function normalizePayload(merged, file, imageInput, imageFallback = null) {
   return {
-    website_id: body.website_id,
-    category_id: body.category_id === '' ? null : body.category_id ?? null,
-    parent_category_id: body.parent_category_id === '' ? null : body.parent_category_id ?? null,
-    name: body.name,
-    slug: body.slug,
-    description: body.description ?? null,
-    short_description: body.short_description ?? null,
-    price: body.price,
-    sale_price: body.sale_price === '' ? null : body.sale_price ?? null,
-    stock: body.stock,
-    sku: body.sku,
-    image: imageUrl,
-    status: body.status ?? 'draft',
-    featured: asBoolInt(body.featured, false),
+    website_id: merged.website_id,
+    category_id: merged.category_id === '' ? null : merged.category_id ?? null,
+    parent_category_id: merged.parent_category_id === '' ? null : merged.parent_category_id ?? null,
+    name: merged.name,
+    slug: merged.slug,
+    description: merged.description ?? null,
+    short_description: merged.short_description ?? null,
+    price: merged.price,
+    sale_price: merged.sale_price === '' ? null : merged.sale_price ?? null,
+    stock: merged.stock,
+    sku: merged.sku,
+    image: resolveImageField(imageInput, file, productFileUrl, imageFallback),
+    status: merged.status ?? 'draft',
+    featured: asBoolInt(merged.featured, false),
   };
 }
 
@@ -133,11 +133,8 @@ async function createProduct(body, file) {
   const base = body.slug || body.name;
   const slug = await ensureUniqueProductSlug(body.website_id, base, null);
 
-  const payload = normalizePayload(body, file);
+  const payload = normalizePayload(body, file, body, null);
   payload.slug = slug;
-  if (!payload.image) {
-    payload.image = null;
-  }
 
   const id = await productModel.insertProduct(payload);
   return getProductById(id);
@@ -159,11 +156,8 @@ async function updateProduct(id, body, file) {
   }
 
   const merged = { ...existing, ...body };
-  const payload = normalizePayload(merged, file);
+  const payload = normalizePayload(merged, file, body, existing.image);
   payload.slug = slug;
-  if (!file) {
-    payload.image = null;
-  }
 
   const affected = await productModel.updateProduct(id, payload);
   if (!affected) {

@@ -154,7 +154,7 @@ async function updateProduct(id, data) {
       sale_price = :sale_price,
       stock = :stock,
       sku = :sku,
-      image = COALESCE(:image, image),
+      image = :image,
       status = :status,
       featured = :featured
     WHERE id = :id AND deleted_at IS NULL

@@ -117,7 +117,7 @@ async function updateCategory(id, data) {
       parent_id = :parent_id,
       name = :name,
       slug = :slug,
-      image = COALESCE(:image, image),
+      image = :image,
       description = :description,
       status = :status
     WHERE id = :id AND deleted_at IS NULL

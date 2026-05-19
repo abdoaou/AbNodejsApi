@@ -1,5 +1,6 @@
 const categoryModel = require('../models/category.model');
 const { slugify, randomSuffix } = require('../utils/slug');
+const { resolveImageField } = require('../utils/resolveImage');
 
 function categoryFileUrl(file) {
   if (!file) return null;
@@ -72,18 +73,18 @@ async function getCategoryById(id) {
   };
 }
 
-function normalizeCategoryBody(body, file) {
-  const parentRaw = body.parent_id;
+function normalizeCategoryBody(merged, file, imageInput, imageFallback = null) {
+  const parentRaw = merged.parent_id;
   const parent_id =
     parentRaw === '' || parentRaw === undefined || parentRaw === null ? null : Number(parentRaw);
 
   return {
     parent_id,
-    name: body.name,
-    slug: body.slug,
-    description: body.description ?? null,
-    status: body.status ?? 'active',
-    image: categoryFileUrl(file),
+    name: merged.name,
+    slug: merged.slug,
+    description: merged.description ?? null,
+    status: merged.status ?? 'active',
+    image: resolveImageField(imageInput, file, categoryFileUrl, imageFallback),
   };
 }
 
@@ -92,11 +93,8 @@ async function createCategory(body, file) {
   const base = body.slug || body.name;
   const slug = await ensureUniqueCategorySlug(parent_id, base, null);
 
-  const payload = normalizeCategoryBody({ ...body, parent_id }, file);
+  const payload = normalizeCategoryBody({ ...body, parent_id }, file, body, null);
   payload.slug = slug;
-  if (!payload.image) {
-    payload.image = null;
-  }
 
   const id = await categoryModel.insertCategory(payload);
   return getCategoryById(id);
@@ -130,11 +128,8 @@ async function updateCategory(id, body, file) {
 
   const merged = { ...existing, ...body };
   merged.parent_id = parent_id;
-  const payload = normalizeCategoryBody(merged, file);
+  const payload = normalizeCategoryBody(merged, file, body, existing.image);
   payload.slug = slug;
-  if (!file) {
-    payload.image = null;
-  }
 
   const affected = await categoryModel.updateCategory(id, payload);
   if (!affected) {

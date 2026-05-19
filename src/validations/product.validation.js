@@ -1,4 +1,5 @@
 const { body, param, query } = require('express-validator');
+const { imageUrlRule } = require('./image.validation');
 
 const idParam = [param('id').isInt({ min: 1 }).withMessage('Invalid id')];
 
@@ -31,6 +32,7 @@ const createRules = [
   body('sku').isLength({ min: 1, max: 120 }).withMessage('Invalid SKU'),
   body('status').optional().isIn(['draft', 'active', 'inactive']),
   body('featured').optional().isBoolean(),
+  imageUrlRule,
 ];
 
 const updateRules = [
@@ -48,6 +50,7 @@ const updateRules = [
   body('sku').optional().isLength({ min: 1, max: 120 }),
   body('status').optional().isIn(['draft', 'active', 'inactive']),
   body('featured').optional().isBoolean(),
+  imageUrlRule,
 ];
 
 const getByIdRules = [...idParam];
