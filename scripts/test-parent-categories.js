@@ -47,6 +47,7 @@ async function run() {
   try {
     const created = await parentCategoryService.createParentCategory(
       {
+        website_id: 1,
         name: 'Automated Test Parent',
         slug,
         description: 'delete me',
@@ -54,7 +55,7 @@ async function run() {
       },
       null
     );
-    if (created.parent_id !== null) throw new Error('parent_id should be null');
+    if (created.parent_id !== undefined) throw new Error('parent_categorie row should not have parent_id');
     if (!created.id) throw new Error('missing id');
     createdId = created.id;
     ok(`POST create (id=${createdId})`);
@@ -113,7 +114,12 @@ async function run() {
   try {
     const categoryModel = require('../src/models/category.model');
     const parent = await parentCategoryService.createParentCategory(
-      { name: 'Parent With Child', slug: `parent-child-${Date.now()}`, status: 'active' },
+      {
+        website_id: 1,
+        name: 'Parent With Child',
+        slug: `parent-child-${Date.now()}`,
+        status: 'active',
+      },
       null
     );
     let childId;

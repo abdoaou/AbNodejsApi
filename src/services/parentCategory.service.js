@@ -1,17 +1,29 @@
+const parentCategoryModel = require('../models/parentCategory.model');
 const categoryModel = require('../models/category.model');
+const websiteModel = require('../models/website.model');
 const { slugify, randomSuffix } = require('../utils/slug');
 const { resolveImageField } = require('../utils/resolveImage');
+const { toDbStatus, formatParentRow } = require('../utils/parentCategoryStatus');
 
 function categoryFileUrl(file) {
   if (!file) return null;
   return `/uploads/categories/${file.filename}`;
 }
 
-async function ensureUniqueParentSlug(baseSlug, excludeId) {
+async function assertWebsite(websiteId) {
+  const site = await websiteModel.findById(websiteId);
+  if (!site) {
+    const err = new Error('Website not found');
+    err.statusCode = 404;
+    throw err;
+  }
+}
+
+async function ensureUniqueSlug(baseSlug, excludeId) {
   let slug = slugify(baseSlug) || 'category';
   for (let i = 0; i < 50; i += 1) {
     // eslint-disable-next-line no-await-in-loop
-    const cnt = await categoryModel.countSlugUnderParent(null, slug, excludeId);
+    const cnt = await parentCategoryModel.countBySlug(slug, excludeId);
     if (cnt === 0) return slug;
     slug = `${slugify(baseSlug)}-${randomSuffix()}`;
   }
@@ -22,28 +34,29 @@ async function ensureUniqueParentSlug(baseSlug, excludeId) {
 
 function normalizeBody(merged, file, imageInput, imageFallback = null) {
   return {
-    parent_id: null,
+    website_id: Number(merged.website_id) || 1,
     name: merged.name,
     slug: merged.slug,
     description: merged.description ?? null,
-    status: merged.status ?? 'active',
+    status: toDbStatus(merged.status ?? 'active'),
     image: resolveImageField(imageInput, file, categoryFileUrl, imageFallback),
   };
 }
 
 async function getParentWithChildren(id) {
-  const parent = await categoryModel.findParentById(id);
+  const parent = await parentCategoryModel.findById(id);
   if (!parent) {
     const err = new Error('Parent category not found');
     err.statusCode = 404;
     throw err;
   }
   const children = await categoryModel.findChildren(id);
-  return { ...parent, children };
+  return { ...formatParentRow(parent), children };
 }
 
 async function listParentCategories() {
-  return categoryModel.findAllParents();
+  const rows = await parentCategoryModel.findAll();
+  return rows.map(formatParentRow);
 }
 
 async function getParentCategoryById(id) {
@@ -51,33 +64,38 @@ async function getParentCategoryById(id) {
 }
 
 async function createParentCategory(body, file) {
-  const slug = await ensureUniqueParentSlug(body.slug || body.name, null);
-  const payload = normalizeBody({ ...body }, file, body, null);
+  const websiteId = Number(body.website_id) || 1;
+  await assertWebsite(websiteId);
+
+  const slug = await ensureUniqueSlug(body.slug || body.name, null);
+  const payload = normalizeBody({ ...body, website_id: websiteId, slug }, file, body, null);
   payload.slug = slug;
 
-  const id = await categoryModel.insertCategory(payload);
+  const id = await parentCategoryModel.insert(payload);
   return getParentWithChildren(id);
 }
 
 async function updateParentCategory(id, body, file) {
-  const existing = await categoryModel.findParentById(id);
+  const existing = await parentCategoryModel.findById(id);
   if (!existing) {
     const err = new Error('Parent category not found');
     err.statusCode = 404;
     throw err;
   }
 
+  const websiteId = body.website_id !== undefined ? Number(body.website_id) : existing.website_id;
+  await assertWebsite(websiteId);
+
   const base = body.slug || body.name || existing.slug;
   let slug = existing.slug;
   if (body.slug || body.name) {
-    slug = await ensureUniqueParentSlug(base, id);
+    slug = await ensureUniqueSlug(base, id);
   }
 
-  const merged = { ...existing, ...body, parent_id: null };
+  const merged = { ...existing, ...body, website_id: websiteId, slug };
   const payload = normalizeBody(merged, file, body, existing.image);
-  payload.slug = slug;
 
-  const affected = await categoryModel.updateCategory(id, payload);
+  const affected = await parentCategoryModel.update(id, payload);
   if (!affected) {
     const err = new Error('Parent category not found');
     err.statusCode = 404;
@@ -87,7 +105,7 @@ async function updateParentCategory(id, body, file) {
 }
 
 async function removeParentCategory(id) {
-  const existing = await categoryModel.findParentById(id);
+  const existing = await parentCategoryModel.findById(id);
   if (!existing) {
     const err = new Error('Parent category not found');
     err.statusCode = 404;
@@ -103,7 +121,7 @@ async function removeParentCategory(id) {
     throw err;
   }
 
-  const affected = await categoryModel.softDelete(id);
+  const affected = await parentCategoryModel.deleteById(id);
   if (!affected) {
     const err = new Error('Parent category not found');
     err.statusCode = 404;

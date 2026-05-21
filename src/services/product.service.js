@@ -1,6 +1,7 @@
 const productModel = require('../models/product.model');
 const websiteModel = require('../models/website.model');
 const categoryModel = require('../models/category.model');
+const parentCategoryModel = require('../models/parentCategory.model');
 const { slugify, randomSuffix } = require('../utils/slug');
 const { resolveImageField } = require('../utils/resolveImage');
 
@@ -36,6 +37,18 @@ async function assertCategory(id) {
   const cat = await categoryModel.findById(id);
   if (!cat) {
     const err = new Error('Category not found');
+    err.statusCode = 404;
+    throw err;
+  }
+}
+
+async function assertParentCategory(id) {
+  if (id === null || id === undefined || id === '') {
+    return;
+  }
+  const parent = await parentCategoryModel.findById(id);
+  if (!parent) {
+    const err = new Error('Parent category not found');
     err.statusCode = 404;
     throw err;
   }
@@ -128,7 +141,7 @@ function normalizePayload(merged, file, imageInput, imageFallback = null) {
 async function createProduct(body, file) {
   await assertWebsite(body.website_id);
   await assertCategory(body.category_id);
-  await assertCategory(body.parent_category_id);
+  await assertParentCategory(body.parent_category_id);
 
   const base = body.slug || body.name;
   const slug = await ensureUniqueProductSlug(body.website_id, base, null);
@@ -144,7 +157,7 @@ async function updateProduct(id, body, file) {
   const existing = await getProductById(id);
   await assertWebsite(body.website_id ?? existing.website_id);
   await assertCategory(body.category_id !== undefined ? body.category_id : existing.category_id);
-  await assertCategory(
+  await assertParentCategory(
     body.parent_category_id !== undefined ? body.parent_category_id : existing.parent_category_id
   );
 

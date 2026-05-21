@@ -1,4 +1,5 @@
 const categoryModel = require('../models/category.model');
+const parentCategoryModel = require('../models/parentCategory.model');
 const { slugify, randomSuffix } = require('../utils/slug');
 const { resolveImageField } = require('../utils/resolveImage');
 
@@ -11,7 +12,7 @@ async function assertParent(parentId, excludeId) {
   if (parentId === null || parentId === undefined || parentId === '') {
     return null;
   }
-  const parent = await categoryModel.findById(parentId);
+  const parent = await parentCategoryModel.findById(parentId);
   if (!parent) {
     const err = new Error('Parent category not found');
     err.statusCode = 404;

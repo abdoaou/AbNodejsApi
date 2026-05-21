@@ -34,29 +34,7 @@ async function findAllFlat() {
   return rows;
 }
 
-/** Top-level categories only (parent_id IS NULL). */
-async function findAllParents() {
-  const sql = `
-    SELECT ${SELECT_FIELDS}
-    FROM categories
-    WHERE deleted_at IS NULL AND parent_id IS NULL
-    ORDER BY name ASC
-  `;
-  const [rows] = await query(sql);
-  return rows;
-}
-
-async function findParentById(id) {
-  const sql = `
-    SELECT ${SELECT_FIELDS}
-    FROM categories
-    WHERE deleted_at IS NULL AND id = :id AND parent_id IS NULL
-    LIMIT 1
-  `;
-  const [rows] = await query(sql, { id });
-  return rows[0] || null;
-}
-
+/** Subcategories linked to parent_categorie.id */
 async function countActiveChildren(parentId) {
   const sql = `
     SELECT COUNT(*) AS cnt
@@ -161,8 +139,6 @@ async function getDescendantIds(rootId) {
 module.exports = {
   findById,
   findAllFlat,
-  findAllParents,
-  findParentById,
   findChildren,
   countActiveChildren,
   countSlugUnderParent,
