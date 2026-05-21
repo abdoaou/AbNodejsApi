@@ -1,9 +1,11 @@
 const productModel = require('../models/product.model');
+const productVariantService = require('./productVariant.service');
 const websiteModel = require('../models/website.model');
 const categoryModel = require('../models/category.model');
 const parentCategoryModel = require('../models/parentCategory.model');
 const { slugify, randomSuffix } = require('../utils/slug');
 const { resolveImageField } = require('../utils/resolveImage');
+const { parseVariantList, hasVariantListField } = require('../utils/parseVariantList');
 
 function productFileUrl(file) {
   if (!file) return null;
@@ -101,14 +103,18 @@ async function listProducts(query) {
   };
 }
 
-async function getProductById(id) {
+async function getProductById(id, { includeVariants = false } = {}) {
   const product = await productModel.findById(id);
   if (!product) {
     const err = new Error('Product not found');
     err.statusCode = 404;
     throw err;
   }
-  return product;
+  if (!includeVariants) {
+    return product;
+  }
+  const variants = await productVariantService.listVariants({ product_id: id });
+  return { ...product, variants };
 }
 
 function asBoolInt(value, defaultValue = 0) {
@@ -150,26 +156,37 @@ async function createProduct(body, file) {
   payload.slug = slug;
 
   const id = await productModel.insertProduct(payload);
-  return getProductById(id);
+  const variants = parseVariantList(body);
+  if (variants?.length) {
+    await productVariantService.syncVariantsForProduct(id, variants, { replace: false });
+  }
+  return getProductById(id, { includeVariants: true });
 }
 
 async function updateProduct(id, body, file) {
   const existing = await getProductById(id);
-  await assertWebsite(body.website_id ?? existing.website_id);
-  await assertCategory(body.category_id !== undefined ? body.category_id : existing.category_id);
+  const { variants: _variants, sizes: _sizes, ...productFields } = body;
+
+  await assertWebsite(productFields.website_id ?? existing.website_id);
+  await assertCategory(
+    productFields.category_id !== undefined ? productFields.category_id : existing.category_id
+  );
   await assertParentCategory(
-    body.parent_category_id !== undefined ? body.parent_category_id : existing.parent_category_id
+    productFields.parent_category_id !== undefined
+      ? productFields.parent_category_id
+      : existing.parent_category_id
   );
 
-  const websiteId = body.website_id ?? existing.website_id;
-  const base = body.slug || body.name || existing.slug;
+  const websiteId = productFields.website_id ?? existing.website_id;
+  const base = productFields.slug || productFields.name || existing.slug;
   let slug = existing.slug;
-  if (body.slug || body.name) {
+  if (productFields.slug || productFields.name) {
     slug = await ensureUniqueProductSlug(websiteId, base, id);
   }
 
-  const merged = { ...existing, ...body };
-  const payload = normalizePayload(merged, file, body, existing.image);
+  const merged = { ...existing, ...productFields };
+  delete merged.variants;
+  const payload = normalizePayload(merged, file, productFields, existing.image);
   payload.slug = slug;
 
   const affected = await productModel.updateProduct(id, payload);
@@ -178,7 +195,13 @@ async function updateProduct(id, body, file) {
     err.statusCode = 404;
     throw err;
   }
-  return getProductById(id);
+
+  const variantsInput = parseVariantList(body);
+  if (hasVariantListField(body) && variantsInput && variantsInput.length > 0) {
+    await productVariantService.syncVariantsForProduct(id, variantsInput, { replace: true });
+  }
+
+  return getProductById(id, { includeVariants: true });
 }
 
 async function removeProduct(id) {

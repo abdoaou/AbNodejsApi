@@ -13,6 +13,18 @@ function errorHandler(err, req, res, next) {
     return fail(res, { message: 'Token expired', status: 401 });
   }
 
+  if (err.code === '23505') {
+    const detail = String(err.detail || err.message || '');
+    if (detail.includes('product_variants') && detail.includes('sku')) {
+      return fail(res, {
+        message:
+          'Duplicate size SKU for this product. Use unique SKUs per size or leave SKU empty to auto-generate.',
+        status: 409,
+      });
+    }
+    return fail(res, { message: 'Duplicate value violates a unique constraint', status: 409 });
+  }
+
   const status = err.statusCode || err.status || 500;
   const message =
     status === 500 && process.env.NODE_ENV === 'production'

@@ -20,7 +20,7 @@ const getById = [
   ...productValidation.getByIdRules,
   validateRequest,
   asyncHandler(async (req, res) => {
-    const product = await productService.getProductById(req.params.id);
+    const product = await productService.getProductById(req.params.id, { includeVariants: true });
     return success(res, {
       message: 'Product fetched successfully',
       data: product,

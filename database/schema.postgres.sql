@@ -108,6 +108,10 @@ CREATE TABLE IF NOT EXISTS product_variants (
 CREATE INDEX IF NOT EXISTS idx_product_variants_product ON product_variants (product_id);
 CREATE INDEX IF NOT EXISTS idx_product_variants_deleted ON product_variants (deleted_at);
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_product_variants_product_sku_active
+  ON product_variants (product_id, sku)
+  WHERE deleted_at IS NULL AND sku IS NOT NULL;
+
 DROP TRIGGER IF EXISTS trg_product_variants_updated ON product_variants;
 CREATE TRIGGER trg_product_variants_updated BEFORE UPDATE ON product_variants
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();

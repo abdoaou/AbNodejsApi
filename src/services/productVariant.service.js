@@ -1,5 +1,13 @@
 const productVariantModel = require('../models/productVariant.model');
 const productModel = require('../models/product.model');
+const { slugify, randomSuffix } = require('../utils/slug');
+const { toNumber } = require('../utils/numbers');
+
+function normalizeSku(value) {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  return trimmed === '' ? null : trimmed;
+}
 
 async function assertProduct(productId) {
   const product = await productModel.findById(productId);
@@ -9,6 +17,26 @@ async function assertProduct(productId) {
     throw err;
   }
   return product;
+}
+
+async function ensureVariantSku(productId, productSku, variantName, proposedSku, excludeId = null) {
+  let sku = normalizeSku(proposedSku);
+  const base = slugify(variantName) || 'size';
+
+  if (!sku) {
+    sku = productSku ? `${normalizeSku(productSku)}-${base}` : `${productId}-${base}`;
+  }
+
+  for (let i = 0; i < 50; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const cnt = await productVariantModel.countBySku(productId, sku, excludeId);
+    if (cnt === 0) return sku;
+    sku = `${sku}-${randomSuffix()}`;
+  }
+
+  const err = new Error('Could not generate unique variant SKU');
+  err.statusCode = 500;
+  throw err;
 }
 
 async function listVariants(query = {}) {
@@ -42,15 +70,46 @@ function normalizeAttributes(value) {
   return null;
 }
 
+function normalizeVariantInput(item, product) {
+  const name = String(item.name || item.size || item.label || 'Size').trim();
+  if (name.length < 2) {
+    const err = new Error('Each size/variant needs a name (min 2 characters)');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const hasPrice = item.price !== undefined && item.price !== null && item.price !== '';
+  const hasSale = item.sale_price !== undefined && item.sale_price !== null && item.sale_price !== '';
+
+  return {
+    id: item.id ? Number(item.id) : null,
+    name,
+    proposedSku: item.sku,
+    price: hasPrice ? toNumber(item.price, null) : toNumber(product.price, null),
+    sale_price: hasSale ? toNumber(item.sale_price, null) : null,
+    stock: toNumber(item.stock, 0),
+    attributes: normalizeAttributes(item.attributes ?? item.size_attributes),
+    status: item.status || 'active',
+  };
+}
+
 async function createVariant(body) {
-  await assertProduct(body.product_id);
+  const product = await assertProduct(body.product_id);
+  const sku = await ensureVariantSku(
+    body.product_id,
+    product.sku,
+    body.name,
+    body.sku,
+    null
+  );
+
   const id = await productVariantModel.insertVariant({
     product_id: body.product_id,
     name: body.name.trim(),
-    sku: body.sku || null,
-    price: body.price ?? null,
-    sale_price: body.sale_price ?? null,
-    stock: body.stock ?? 0,
+    sku,
+    price: toNumber(body.price, null),
+    sale_price: toNumber(body.sale_price, null),
+    stock: toNumber(body.stock, 0),
     attributes: normalizeAttributes(body.attributes),
     status: body.status || 'active',
   });
@@ -60,15 +119,25 @@ async function createVariant(body) {
 async function updateVariant(id, body) {
   const existing = await getVariantById(id);
   const productId = body.product_id !== undefined ? body.product_id : existing.product_id;
-  await assertProduct(productId);
+  const product = await assertProduct(productId);
+
+  const name = body.name !== undefined ? body.name.trim() : existing.name;
+  const sku = await ensureVariantSku(
+    productId,
+    product.sku,
+    name,
+    body.sku !== undefined ? body.sku : existing.sku,
+    id
+  );
 
   const affected = await productVariantModel.updateVariant(id, {
     product_id: productId,
-    name: body.name !== undefined ? body.name.trim() : existing.name,
-    sku: body.sku !== undefined ? body.sku : existing.sku,
-    price: body.price !== undefined ? body.price : existing.price,
-    sale_price: body.sale_price !== undefined ? body.sale_price : existing.sale_price,
-    stock: body.stock !== undefined ? body.stock : existing.stock,
+    name,
+    sku,
+    price: body.price !== undefined ? toNumber(body.price, existing.price) : existing.price,
+    sale_price:
+      body.sale_price !== undefined ? toNumber(body.sale_price, null) : existing.sale_price,
+    stock: body.stock !== undefined ? toNumber(body.stock, existing.stock) : existing.stock,
     attributes:
       body.attributes !== undefined ? normalizeAttributes(body.attributes) : existing.attributes,
     status: body.status !== undefined ? body.status : existing.status,
@@ -91,10 +160,93 @@ async function removeVariant(id) {
   }
 }
 
+/**
+ * Upsert sizes: update by id when provided, insert new, remove missing when replace=true.
+ */
+async function syncVariantsForProduct(productId, items, { replace = false } = {}) {
+  const product = await assertProduct(productId);
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) {
+    return productVariantModel.listAll(productId);
+  }
+
+  const existingList = await productVariantModel.listAll(productId);
+  const existingById = new Map(existingList.map((row) => [Number(row.id), row]));
+  const keptIds = new Set();
+  const usedSkus = new Set();
+  const results = [];
+
+  for (const raw of list) {
+    const item = normalizeVariantInput(raw, product);
+    const variantId = item.id;
+
+    if (variantId && existingById.has(variantId)) {
+      const ex = existingById.get(variantId);
+      let sku = ex.sku;
+      if (item.proposedSku !== undefined && normalizeSku(item.proposedSku) !== null) {
+        sku = await ensureVariantSku(productId, product.sku, item.name, item.proposedSku, variantId);
+      }
+      while (usedSkus.has(sku)) {
+        sku = `${sku}-${randomSuffix()}`;
+      }
+      usedSkus.add(sku);
+      keptIds.add(variantId);
+
+      // eslint-disable-next-line no-await-in-loop
+      await productVariantModel.updateVariant(variantId, {
+        product_id: productId,
+        name: item.name,
+        sku,
+        price: item.price,
+        sale_price: item.sale_price,
+        stock: item.stock,
+        attributes: item.attributes,
+        status: item.status,
+      });
+      // eslint-disable-next-line no-await-in-loop
+      results.push(await getVariantById(variantId));
+      continue;
+    }
+
+    let sku = await ensureVariantSku(productId, product.sku, item.name, item.proposedSku, null);
+    while (usedSkus.has(sku)) {
+      sku = `${sku}-${randomSuffix()}`;
+    }
+    usedSkus.add(sku);
+
+    // eslint-disable-next-line no-await-in-loop
+    const newId = await productVariantModel.insertVariant({
+      product_id: productId,
+      name: item.name,
+      sku,
+      price: item.price,
+      sale_price: item.sale_price,
+      stock: item.stock,
+      attributes: item.attributes,
+      status: item.status,
+    });
+    keptIds.add(Number(newId));
+    // eslint-disable-next-line no-await-in-loop
+    results.push(await getVariantById(newId));
+  }
+
+  if (replace) {
+    for (const ex of existingList) {
+      if (!keptIds.has(Number(ex.id))) {
+        // eslint-disable-next-line no-await-in-loop
+        await productVariantModel.softDelete(ex.id);
+      }
+    }
+  }
+
+  return results;
+}
+
 module.exports = {
   listVariants,
   getVariantById,
   createVariant,
   updateVariant,
   removeVariant,
+  syncVariantsForProduct,
 };

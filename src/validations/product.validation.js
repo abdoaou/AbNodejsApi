@@ -33,6 +33,12 @@ const createRules = [
   body('status').optional().isIn(['draft', 'active', 'inactive']),
   body('featured').optional().isBoolean(),
   imageUrlRule,
+  body('variants')
+    .optional()
+    .custom((v) => v === undefined || Array.isArray(v) || typeof v === 'string'),
+  body('sizes')
+    .optional()
+    .custom((v) => v === undefined || Array.isArray(v) || typeof v === 'string'),
 ];
 
 const updateRules = [
@@ -51,6 +57,12 @@ const updateRules = [
   body('status').optional().isIn(['draft', 'active', 'inactive']),
   body('featured').optional().isBoolean(),
   imageUrlRule,
+  body('variants')
+    .optional()
+    .custom((v) => v === undefined || Array.isArray(v) || typeof v === 'string'),
+  body('sizes')
+    .optional()
+    .custom((v) => v === undefined || Array.isArray(v) || typeof v === 'string'),
 ];
 
 const getByIdRules = [...idParam];

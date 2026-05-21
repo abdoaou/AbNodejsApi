@@ -25,6 +25,31 @@ async function findById(id) {
   return rows[0] || null;
 }
 
+async function countBySku(productId, sku, excludeId = null) {
+  if (!sku) return 0;
+  let sql = `
+    SELECT COUNT(*) AS cnt
+    FROM product_variants
+    WHERE deleted_at IS NULL AND product_id = :product_id AND sku = :sku
+  `;
+  const params = { product_id: productId, sku };
+  if (excludeId) {
+    sql += ' AND id <> :excludeId';
+    params.excludeId = excludeId;
+  }
+  const [rows] = await query(sql, params);
+  return Number(rows[0].cnt);
+}
+
+async function softDeleteByProductId(productId) {
+  const sql = `
+    UPDATE product_variants SET deleted_at = NOW()
+    WHERE product_id = :product_id AND deleted_at IS NULL
+  `;
+  const [, meta] = await query(sql, { product_id: productId });
+  return meta.affectedRows;
+}
+
 async function listAll(productId = null) {
   let sql = `
     SELECT ${SELECT_FIELDS}
@@ -68,19 +93,21 @@ async function updateVariant(id, data) {
       status = :status
     WHERE id = :id AND deleted_at IS NULL
   `;
-  const [result] = await query(sql, { ...data, id });
-  return result.affectedRows;
+  const [, meta] = await query(sql, { ...data, id });
+  return meta.affectedRows;
 }
 
 async function softDelete(id) {
   const sql = `UPDATE product_variants SET deleted_at = NOW() WHERE id = :id AND deleted_at IS NULL`;
-  const [result] = await query(sql, { id });
-  return result.affectedRows;
+  const [, meta] = await query(sql, { id });
+  return meta.affectedRows;
 }
 
 module.exports = {
   findById,
   listAll,
+  countBySku,
+  softDeleteByProductId,
   insertVariant,
   updateVariant,
   softDelete,
